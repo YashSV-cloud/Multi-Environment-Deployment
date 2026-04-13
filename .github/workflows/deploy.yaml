@@ -1,9 +1,12 @@
-name: CI/CD Pipeline
+name: CI/CD to Kubernetes (Multi-Env)
 
 on:
   push:
     branches:
-      - main   # triggers when you push to main branch
+      - dev
+      - test
+      - staging
+      - main
 
 jobs:
   build-and-deploy:
@@ -15,37 +18,43 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # 2️⃣ Login to Docker Hub
-    - name: Login to Docker Hub
+    # 2️⃣ Set environment variables
+    - name: Set image tag based on branch
+      run: |
+        if [ "${GITHUB_REF_NAME}" = "main" ]; then
+          echo "IMAGE_TAG=prod" >> $GITHUB_ENV
+          echo "ENVIRONMENT=prod" >> $GITHUB_ENV
+        else
+          echo "IMAGE_TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          echo "ENVIRONMENT=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+        fi
+
+    # 3️⃣ Login to Docker Hub
+    - name: Docker Login
       run: |
         echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-    # 3️⃣ Build Docker Image
-    - name: Build Docker Image
+    # 4️⃣ Build Docker Image
+    - name: Build Image
       run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/fullstack-app:latest .
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/fullstack-app:${{ env.IMAGE_TAG }} .
 
-    # 4️⃣ Push Image to Docker Hub
-    - name: Push Docker Image
+    # 5️⃣ Push Docker Image
+    - name: Push Image
       run: |
-        docker push ${{ secrets.DOCKER_USERNAME }}/fullstack-app:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/fullstack-app:${{ env.IMAGE_TAG }}
 
-    # 5️⃣ Deploy to EC2 via SSH
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@v0.1.10
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          echo "Pulling latest image..."
-          docker pull ${{ secrets.DOCKER_USERNAME }}/fullstack-app:latest
+    # 6️⃣ Setup kubeconfig
+    - name: Set Kubeconfig
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
 
-          echo "Stopping old container..."
-          docker stop fullstack-app || true
-          docker rm fullstack-app || true
+    # 7️⃣ Deploy to Kubernetes
+    - name: Deploy to Kubernetes
+      run: |
+        echo "Deploying to $ENVIRONMENT environment..."
 
-          echo "Running new container..."
-          docker run -d -p 3000:3000 --name fullstack-app ${{ secrets.DOCKER_USERNAME }}/fullstack-app:latest
+        kubectl apply -k k8s/overlays/${{ env.ENVIRONMENT }}
 
-          echo "Deployment successful 🚀"
+        echo "Deployment completed 🚀"
