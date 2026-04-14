@@ -2,11 +2,9 @@ FROM node:18
 
 WORKDIR /app
 
-COPY package.json .
-RUN npm install
+COPY backend/ ./backend
+COPY frontend/ ./frontend
 
-COPY . .
+RUN npm init -y && npm install express
 
-EXPOSE 3000
-
-CMD ["npm", "start"]
+CMD ["node", "backend/server.js"]

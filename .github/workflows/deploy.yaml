@@ -1,60 +1,32 @@
-name: CI/CD to Kubernetes (Multi-Env)
+name: Deploy to EC2
 
 on:
   push:
-    branches:
-      - dev
-      - test
-      - staging
-      - main
+    branches: [main]
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v3
 
-    # 1️⃣ Checkout code
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Login to DockerHub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-    # 2️⃣ Set environment variables
-    - name: Set image tag based on branch
-      run: |
-        if [ "${GITHUB_REF_NAME}" = "main" ]; then
-          echo "IMAGE_TAG=prod" >> $GITHUB_ENV
-          echo "ENVIRONMENT=prod" >> $GITHUB_ENV
-        else
-          echo "IMAGE_TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
-          echo "ENVIRONMENT=${GITHUB_REF_NAME}" >> $GITHUB_ENV
-        fi
+      - name: Build & Push Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/hello-app:latest .
+          docker push ${{ secrets.DOCKER_USERNAME }}/hello-app:latest
 
-    # 3️⃣ Login to Docker Hub
-    - name: Docker Login
-      run: |
-        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-
-    # 4️⃣ Build Docker Image
-    - name: Build Image
-      run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/fullstack-app:${{ env.IMAGE_TAG }} .
-
-    # 5️⃣ Push Docker Image
-    - name: Push Image
-      run: |
-        docker push ${{ secrets.DOCKER_USERNAME }}/fullstack-app:${{ env.IMAGE_TAG }}
-
-    # 6️⃣ Setup kubeconfig
-    - name: Set Kubeconfig
-      run: |
-        mkdir -p ~/.kube
-        echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
-
-    # 7️⃣ Deploy to Kubernetes
-    - name: Deploy to Kubernetes
-      run: |
-        echo "Deploying to $ENVIRONMENT environment..."
-
-        kubectl apply -k k8s/overlays/${{ env.ENVIRONMENT }}
-
-        echo "Deployment completed 🚀"
+      - name: Deploy on EC2 via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker pull ${{ secrets.DOCKER_USERNAME }}/hello-app:latest
+            docker stop hello-app || true
+            docker rm hello-app || true
+            docker run -d -p 80:3000 --name hello-app ${{ secrets.DOCKER_USERNAME }}/hello-app:latest
