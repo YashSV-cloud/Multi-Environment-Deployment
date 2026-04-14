@@ -9,16 +9,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      # 1️⃣ Checkout code
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-      - name: Login DockerHub
+      # 2️⃣ Login to DockerHub
+      - name: Login to DockerHub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
+      # 3️⃣ Build & Push Docker Image
       - name: Build & Push Image
         run: |
           docker build -t ${{ secrets.DOCKER_USERNAME }}/hello-app:${{ github.ref_name }} .
           docker push ${{ secrets.DOCKER_USERNAME }}/hello-app:${{ github.ref_name }}
 
+      # 4️⃣ Set Namespace based on branch
       - name: Set Namespace
         run: |
           if [[ "${GITHUB_REF_NAME}" == "dev" ]]; then echo "NS=dev" >> $GITHUB_ENV; fi
@@ -26,11 +31,20 @@ jobs:
           if [[ "${GITHUB_REF_NAME}" == "staging" ]]; then echo "NS=staging" >> $GITHUB_ENV; fi
           if [[ "${GITHUB_REF_NAME}" == "main" ]]; then echo "NS=prod" >> $GITHUB_ENV; fi
 
+      # 5️⃣ Setup kubeconfig (FIXED)
       - name: Setup kubeconfig
         run: |
           echo "${{ secrets.KUBECONFIG }}" > kubeconfig.yaml
           export KUBECONFIG=$PWD/kubeconfig.yaml
 
-      - name: Deploy
+      # 6️⃣ Debug: Verify Kubernetes Connection ✅
+      - name: Test Kubernetes Connection
+        run: |
+          kubectl version --client
+          kubectl get nodes
+          kubectl get ns
+
+      # 7️⃣ Deploy to k3s
+      - name: Deploy to k3s
         run: |
           kubectl apply -f k8s/${NS}.yaml
