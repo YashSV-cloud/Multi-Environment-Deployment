@@ -1,16 +1,28 @@
-<!-- frontend/index.html -->
 <!DOCTYPE html>
 <html>
+<head>
+  <title>Fullstack App</title>
+</head>
 <body>
+
   <h1>Simple Fullstack App</h1>
-  <p id="msg">Loading...</p>
+
+  <button onclick="getMessage()">Click Me</button>
+
+  <p id="msg">Click button to get message</p>
 
   <script>
-    fetch("/api/message")
-      .then(res => res.json())
-      .then(data => {
-        document.getElementById("msg").innerText = data.message;
-      });
+    function getMessage() {
+      fetch("/api/message")
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById("msg").innerText = data.message;
+        })
+        .catch(err => {
+          document.getElementById("msg").innerText = "Error calling backend";
+        });
+    }
   </script>
+
 </body>
 </html>
